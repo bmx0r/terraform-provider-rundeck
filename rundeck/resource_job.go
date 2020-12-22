@@ -271,12 +271,27 @@ func resourceRundeckJob() *schema.Resource {
 							Optional: true,
 						},
 
+						"inline_script_invocation_string": &schema.Schema{
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+
+						"inline_script_args_quoted": &schema.Schema{
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
+
 						"script_file": {
 							Type:     schema.TypeString,
 							Optional: true,
 						},
 
 						"script_file_args": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+
+						"file_extension": {
 							Type:     schema.TypeString,
 							Optional: true,
 						},
@@ -470,11 +485,16 @@ func jobFromResourceData(d *schema.ResourceData) (*JobDetail, error) {
 	for _, commandI := range commandConfigs {
 		commandMap := commandI.(map[string]interface{})
 		command := JobCommand{
-			Description:    commandMap["description"].(string),
-			ShellCommand:   commandMap["shell_command"].(string),
-			Script:         commandMap["inline_script"].(string),
+			Description:  commandMap["description"].(string),
+			ShellCommand: commandMap["shell_command"].(string),
+			Script:       commandMap["inline_script"].(string),
+			ScriptInterpreter: &JobCommandScriptInterpreter{
+				InvocationString: commandMap["inline_script_invocation_string"].(string),
+				ArgsQuoted:       commandMap["inline_script_args_quoted"].(bool),
+			},
 			ScriptFile:     commandMap["script_file"].(string),
 			ScriptFileArgs: commandMap["script_file_args"].(string),
+			FileExtension:  commandMap["file_extension"].(string),
 		}
 
 		jobRefsI := commandMap["job"].([]interface{})
@@ -783,6 +803,7 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 				"inline_script":    command.Script,
 				"script_file":      command.ScriptFile,
 				"script_file_args": command.ScriptFileArgs,
+				"file_extension":   command.FileExtension,
 			}
 
 			if command.Job != nil {
@@ -819,6 +840,10 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 						"config": map[string]string(command.NodeStepPlugin.Config),
 					},
 				}
+			}
+			if command.ScriptInterpreter != nil {
+				commandConfigI["inline_script_invocation_string"] = command.ScriptInterpreter.InvocationString
+				commandConfigI["inline_script_args_quoted"] = command.ScriptInterpreter.ArgsQuoted
 			}
 
 			commandConfigsI = append(commandConfigsI, commandConfigI)
