@@ -40,6 +40,30 @@ func TestAccJob_basic(t *testing.T) {
 	})
 }
 
+func TestAccJob_storage_path(t *testing.T) {
+	var job JobDetail
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccJobCheckDestroy(&job),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccJobConfig_basic,
+				Check: resource.ComposeTestCheckFunc(
+					testAccJobCheckExists("rundeck_job.test", &job),
+					func(s *terraform.State) error {
+						if expected := "keys/password"; job.OptionsConfig.Options[1].StoragePath != expected {
+							return fmt.Errorf("wrong storage_path; expected %v, got %v", expected, job.OptionsConfig.Options[1].StoragePath)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
 func TestAccJob_cmd_nodefilter(t *testing.T) {
 	var job JobDetail
 
@@ -197,6 +221,11 @@ resource "rundeck_job" "test" {
     name = "foo"
     default_value = "bar"
   }
+  option {
+    name = "option_storagepath"
+    obscure_input = true
+    storage_path = "keys/password"
+  }
   command {
     description = "Prints Hello World"
     shell_command = "echo Hello World"
@@ -237,6 +266,7 @@ resource "rundeck_job" "test" {
   option {
     name = "foo"
     default_value = "bar"
+    value_choices = []
   }
   command {
     job {
@@ -247,6 +277,10 @@ resource "rundeck_job" "test" {
       }
     }
     description = "Prints Hello World"
+    #shell_command = "echo Hello World"
+  }
+  command {
+    description = "Prints Hello World in shell command"
     shell_command = "echo Hello World"
   }
   notification {
