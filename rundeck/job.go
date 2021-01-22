@@ -283,6 +283,7 @@ type JobCommandJobRef struct {
 	XMLName        xml.Name                  `xml:"jobref"`
 	Name           string                    `xml:"name,attr"`
 	GroupName      string                    `xml:"group,attr"`
+	ProjectName    string                    `xml:"project,attr"`
 	RunForEachNode bool                      `xml:"nodeStep,attr"`
 	Dispatch       *JobDispatch              `xml:"dispatch,omitempty"`
 	NodeFilter     *JobNodeFilter            `xml:"nodefilters,omitempty"`
@@ -331,10 +332,11 @@ type jobImportResult struct {
 type JobDispatch struct {
 	ExcludePrecedence        *Boolean `xml:"excludePrecedence"`
 	MaxThreadCount           int      `xml:"threadcount,omitempty"`
-	ContinueOnError          bool     `xml:"keepgoing"`
+	ContinueOnError          bool     `xml:"keepgoing,omitempty"`
 	RankAttribute            string   `xml:"rankAttribute,omitempty"`
 	RankOrder                string   `xml:"rankOrder,omitempty"`
 	SuccessOnEmptyNodeFilter bool     `xml:"successOnEmptyNodeFilter,omitempty"`
+	NodeIntersect            bool     `xml:"nodeIntersect,omitempty"`
 }
 
 // GetJobSummariesForProject returns summaries of the jobs belonging to the named project.

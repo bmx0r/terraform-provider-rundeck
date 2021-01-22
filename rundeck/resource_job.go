@@ -69,6 +69,7 @@ func resourceRundeckJob() *schema.Resource {
 			"continue_on_error": {
 				Type:     schema.TypeBool,
 				Optional: true,
+				Default:  false,
 			},
 
 			"rank_order": {
@@ -80,11 +81,13 @@ func resourceRundeckJob() *schema.Resource {
 			"rank_attribute": {
 				Type:     schema.TypeString,
 				Optional: true,
+				Default:  "nodename",
 			},
 
 			"success_on_empty_node_filter": {
 				Type:     schema.TypeBool,
 				Optional: true,
+				Default:  false,
 			},
 
 			"preserve_options_order": {
@@ -309,6 +312,10 @@ func resourceRundeckJob() *schema.Resource {
 										Type:     schema.TypeString,
 										Optional: true,
 									},
+									"project_name": {
+										Type:     schema.TypeString,
+										Optional: true,
+									},
 									"run_for_each_node": {
 										Type:     schema.TypeBool,
 										Optional: true,
@@ -316,6 +323,28 @@ func resourceRundeckJob() *schema.Resource {
 									"args": {
 										Type:     schema.TypeString,
 										Optional: true,
+									},
+									"max_thread_count": {
+										Type:     schema.TypeInt,
+										Optional: true,
+									},
+									"continue_on_error": {
+										Type:     schema.TypeBool,
+										Optional: true,
+									},
+									"rank_order": {
+										Type:     schema.TypeString,
+										Optional: true,
+									},
+									"rank_attribute": {
+										Type:     schema.TypeString,
+										Optional: true,
+										Default:  "nodename",
+									},
+									"node_intersect": {
+										Type:     schema.TypeBool,
+										Optional: true,
+										Default:  false,
 									},
 									"nodefilters": {
 										Type:     schema.TypeMap,
@@ -507,9 +536,17 @@ func jobFromResourceData(d *schema.ResourceData) (*JobDetail, error) {
 			command.Job = &JobCommandJobRef{
 				Name:           jobRefMap["name"].(string),
 				GroupName:      jobRefMap["group_name"].(string),
+				ProjectName:    jobRefMap["project_name"].(string),
 				RunForEachNode: jobRefMap["run_for_each_node"].(bool),
 				Arguments:      JobCommandJobRefArguments(jobRefMap["args"].(string)),
 				NodeFilter:     &JobNodeFilter{},
+				Dispatch: &JobDispatch{
+					MaxThreadCount:  jobRefMap["max_thread_count"].(int),
+					ContinueOnError: jobRefMap["continue_on_error"].(bool),
+					RankAttribute:   jobRefMap["rank_attribute"].(string),
+					RankOrder:       jobRefMap["rank_order"].(string),
+					NodeIntersect:   jobRefMap["node_intersect"].(bool),
+				},
 			}
 			nodeFilterMap := jobRefMap["nodefilters"].(map[string]interface{})
 			if nodeFilterMap["filter"] != nil {
@@ -757,8 +794,8 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 		d.Set("success_on_empty_node_filter", job.Dispatch.SuccessOnEmptyNodeFilter)
 	} else {
 		d.Set("max_thread_count", 1)
-		d.Set("continue_on_error", nil)
-		d.Set("rank_attribute", nil)
+		d.Set("continue_on_error", false)
+		d.Set("rank_attribute", "nodename")
 		d.Set("rank_order", "ascending")
 	}
 
@@ -813,15 +850,27 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 					nodeFilterMap = make(map[string]interface{})
 					nodeFilterMap["filter"] = command.Job.NodeFilter.Query
 				}
-				commandConfigI["job"] = []interface{}{
-					map[string]interface{}{
-						"name":              command.Job.Name,
-						"group_name":        command.Job.GroupName,
-						"run_for_each_node": command.Job.RunForEachNode,
-						"args":              command.Job.Arguments,
-						"nodefilters":       nodeFilterMap,
-					},
+
+				var nodeJobMap map[string]interface{}
+				nodeJobMap = make(map[string]interface{})
+				nodeJobMap["name"] = command.Job.Name
+				nodeJobMap["group_name"] = command.Job.GroupName
+				nodeJobMap["project_name"] = command.Job.ProjectName
+				nodeJobMap["run_for_each_node"] = command.Job.RunForEachNode
+				nodeJobMap["args"] = command.Job.Arguments
+				nodeJobMap["nodefilters"] = nodeFilterMap
+
+				if command.Job.Dispatch != nil {
+					nodeJobMap["max_thread_count"] = command.Job.Dispatch.MaxThreadCount
+					nodeJobMap["continue_on_error"] = command.Job.Dispatch.ContinueOnError
+					nodeJobMap["rank_attribute"] = command.Job.Dispatch.RankAttribute
+					nodeJobMap["rank_order"] = command.Job.Dispatch.RankOrder
+					nodeJobMap["node_intesect"] = command.Job.Dispatch.NodeIntersect
+				} else {
+					nodeJobMap["rank_attribute"] = "nodename"
 				}
+
+				commandConfigI["job"] = []interface{}{nodeJobMap}
 			}
 
 			if command.StepPlugin != nil {

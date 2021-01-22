@@ -75,7 +75,7 @@ func TestAccJob_storage_path(t *testing.T) {
 	})
 }
 
-func TestAccJob_cmd_nodefilter(t *testing.T) {
+func TestAccJob_cmd_jobref(t *testing.T) {
 	var job JobDetail
 
 	resource.Test(t, resource.TestCase{
@@ -84,15 +84,24 @@ func TestAccJob_cmd_nodefilter(t *testing.T) {
 		CheckDestroy: testAccJobCheckDestroy(&job),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccJobConfig_cmd_nodefilter,
+				Config: testAccJobConfig_cmd_jobref,
 				Check: resource.ComposeTestCheckFunc(
 					testAccJobCheckExists("rundeck_job.test", &job),
 					func(s *terraform.State) error {
-						if expected := "basic-job-with-node-filter"; job.Name != expected {
+						if expected := "basic-job-with-jobref"; job.Name != expected {
 							return fmt.Errorf("wrong name; expected %v, got %v", expected, job.Name)
 						}
+						if expected := "Other Job Name"; job.CommandSequence.Commands[0].Job.Name != expected {
+							return fmt.Errorf("failed to set jobref name; expected %v, got %v", expected, job.CommandSequence.Commands[0].Job.Name)
+						}
+						if expected := "test"; job.CommandSequence.Commands[0].Job.GroupName != expected {
+							return fmt.Errorf("failed to set jobref group; expected %v, got %v", expected, job.CommandSequence.Commands[0].Job.GroupName)
+						}
+						if expected := true; job.CommandSequence.Commands[0].Job.Dispatch.NodeIntersect != expected {
+							return fmt.Errorf("failed to set jobref intersect; expected %v, got %v", expected, job.CommandSequence.Commands[0].Job.Dispatch.NodeIntersect)
+						}
 						if expected := "name: tacobell"; job.CommandSequence.Commands[0].Job.NodeFilter.Query != expected {
-							return fmt.Errorf("failed to set job node filter; expected %v, got %v", expected, job.CommandSequence.Commands[0].Job.NodeFilter.Query)
+							return fmt.Errorf("failed to set jobref node filter; expected %v, got %v", expected, job.CommandSequence.Commands[0].Job.NodeFilter.Query)
 						}
 						return nil
 					},
@@ -256,7 +265,7 @@ resource "rundeck_job" "test" {
 }
 `
 
-const testAccJobConfig_cmd_nodefilter = `
+const testAccJobConfig_cmd_jobref = `
 resource "rundeck_project" "test" {
   name = "terraform-acc-test-job"
   description = "parent project for job acceptance tests"
@@ -271,7 +280,7 @@ resource "rundeck_project" "test" {
 }
 resource "rundeck_job" "test" {
   project_name = "${rundeck_project.test.name}"
-  name = "basic-job-with-node-filter"
+  name = "basic-job-with-jobref"
   description = "A basic job"
   execution_enabled = true
   node_filter_query = "example"
@@ -287,7 +296,10 @@ resource "rundeck_job" "test" {
   }
   command {
     job {
-      name = "Other Job Name"
+	  name = "Other Job Name"
+	  group_name = "test"
+	  project_name = "${rundeck_project.test.name}"
+	  node_intersect = true
       run_for_each_node = true
       nodefilters = {
         filter: "name: tacobell"
