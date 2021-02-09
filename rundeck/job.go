@@ -393,7 +393,7 @@ func GetJob(c *rundeck.BaseClient, id string) (*JobDetail, error) {
 
 	err = xml.Unmarshal(respBytes, jobList)
 	if err != nil {
-		return nil, fmt.Errorf("Custom Error joblist : (%v)", err)
+		return nil, fmt.Errorf("Error unmarshal xml: (%v)", err)
 	}
 
 	return &jobList.Jobs[0], nil
