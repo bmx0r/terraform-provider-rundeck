@@ -203,6 +203,9 @@ type JobOption struct {
 
 	// Description of the value to be shown in the Rundeck UI.
 	Description string `xml:"description,omitempty"`
+
+	// If set, Rundeck will hide this option.
+	Hidden bool `xml:"hidden,omitempty"`
 }
 
 // JobValueChoices is a specialization of []string representing a sequence of predefined values
@@ -220,12 +223,27 @@ type JobCommandSequence struct {
 	// "step-first".
 	OrderingStrategy string `xml:"strategy,attr,omitempty"`
 
+	// Sequence of global log filters.
+	PluginConfig *PluginConfigFilters `xml:"pluginConfig"`
+
 	// Sequence of commands to run in the sequence.
 	Commands []JobCommand `xml:"command"`
 
 	// Description
 	Description string `xml:"description,omitempty"`
 }
+
+type PluginConfigFilters struct {
+	Filters []LogFilter `xml:"LogFilter"`
+}
+
+type LogFilter struct {
+	XMLName xml.Name
+	Type    string          `xml:"type,attr"`
+	Config  LogFilterConfig `xml:"config"`
+}
+
+type LogFilterConfig map[string]string
 
 // JobCommand describes a particular command to run within the sequence of commands on a job.
 // The members of this struct are mutually-exclusive except for the pair of ScriptFile and
@@ -373,7 +391,10 @@ func GetJob(c *rundeck.BaseClient, id string) (*JobDetail, error) {
 
 	respBytes, err := ioutil.ReadAll(resp.Body)
 
-	xml.Unmarshal(respBytes, jobList)
+	err = xml.Unmarshal(respBytes, jobList)
+	if err != nil {
+		return nil, fmt.Errorf("Error unmarshal xml: (%v)", err)
+	}
 
 	return &jobList.Jobs[0], nil
 }
@@ -511,12 +532,22 @@ func (a *JobCommandJobRefArguments) UnmarshalXML(d *xml.Decoder, start xml.Start
 
 func (c JobPluginConfig) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 	rc := map[string]string(c)
-	return marshalMapToXML(&rc, e, start, "entry", "key", "value")
+	return marshalJobMapToXML(&rc, e, start, "entry", "key", "value")
 }
 
 func (c *JobPluginConfig) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	rc := (*map[string]string)(c)
-	return unmarshalMapFromXML(rc, d, start, "entry", "key", "value")
+	return unmarshalJobMapFromXML(rc, d, start, "entry", "key", "value")
+}
+
+func (c LogFilterConfig) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	rc := map[string]string(c)
+	return marshalLogMapToXML(&rc, e, start)
+}
+
+func (c *LogFilterConfig) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	rc := (*map[string]string)(c)
+	return unmarshalLogMapFromXML(rc, d, start)
 }
 
 // JobSummary produces a JobSummary instance with values populated from the import result.

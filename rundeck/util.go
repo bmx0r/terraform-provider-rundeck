@@ -26,7 +26,7 @@ func validateValueFunc(values []string) schema.SchemaValidateFunc {
 	}
 }
 
-func marshalMapToXML(c *map[string]string, e *xml.Encoder, start xml.StartElement, entryName string, keyName string, valueName string) error {
+func marshalJobMapToXML(c *map[string]string, e *xml.Encoder, start xml.StartElement, entryName string, keyName string, valueName string) error {
 	if len(*c) == 0 {
 		return nil
 	}
@@ -60,7 +60,7 @@ func marshalMapToXML(c *map[string]string, e *xml.Encoder, start xml.StartElemen
 	return nil
 }
 
-func unmarshalMapFromXML(c *map[string]string, d *xml.Decoder, start xml.StartElement, entryName string, keyName string, valueName string) error {
+func unmarshalJobMapFromXML(c *map[string]string, d *xml.Decoder, start xml.StartElement, entryName string, keyName string, valueName string) error {
 	result := map[string]string{}
 	for {
 		token, err := d.Token()
@@ -90,6 +90,59 @@ func unmarshalMapFromXML(c *map[string]string, d *xml.Decoder, start xml.StartEl
 			if k == "" {
 				return fmt.Errorf("found config entry with empty key")
 			}
+			result[k] = v
+		case xml.EndElement:
+			if t.Name.Local == start.Name.Local {
+				*c = result
+				return nil
+			}
+		}
+	}
+}
+
+func marshalLogMapToXML(c *map[string]string, e *xml.Encoder, start xml.StartElement) error {
+	if len(*c) == 0 {
+		return nil
+	}
+	e.EncodeToken(start)
+
+	// Sort the keys so we'll have a deterministic result.
+	keys := []string{}
+	for k, _ := range *c {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := (*c)[k]
+		e.EncodeToken(xml.StartElement{Name: xml.Name{Local: k}})
+		e.EncodeToken(xml.CharData([]byte(v)))
+		e.EncodeToken(xml.EndElement{xml.Name{Local: k}})
+	}
+	e.EncodeToken(xml.EndElement{start.Name})
+	return nil
+}
+
+func unmarshalLogMapFromXML(c *map[string]string, d *xml.Decoder, start xml.StartElement) error {
+	result := map[string]string{}
+	for {
+		token, err := d.Token()
+		if token == nil {
+			err = fmt.Errorf("EOF while decoding plugin config")
+		}
+		if err != nil {
+			return err
+		}
+
+		var k string
+		var v string
+		switch t := token.(type) {
+		default:
+			continue
+		case xml.StartElement:
+			k = t.Name.Local
+		case xml.CharData:
+			v = string(xml.CharData(t))
 			result[k] = v
 		case xml.EndElement:
 			if t.Name.Local == start.Name.Local {
