@@ -251,6 +251,10 @@ func resourceRundeckJob() *schema.Resource {
 							Type:     schema.TypeString,
 							Optional: true,
 						},
+						"hidden": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
 					},
 				},
 			},
@@ -380,6 +384,12 @@ func resourceRundeckJob() *schema.Resource {
 					},
 				},
 			},
+
+			"logfilter": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Elem:     resourceRundeckJobPluginResource(),
+			},
 		},
 	}
 }
@@ -508,6 +518,7 @@ func jobFromResourceData(d *schema.ResourceData) (*JobDetail, error) {
 		ContinueOnError:  d.Get("continue_on_error").(bool),
 		OrderingStrategy: d.Get("command_ordering_strategy").(string),
 		Commands:         []JobCommand{},
+		PluginConfig:     &PluginConfigFilters{},
 	}
 
 	commandConfigs := d.Get("command").([]interface{})
@@ -593,6 +604,23 @@ func jobFromResourceData(d *schema.ResourceData) (*JobDetail, error) {
 
 		sequence.Commands = append(sequence.Commands, command)
 	}
+	logFilterConfigsI := d.Get("logfilter").([]interface{})
+	if len(logFilterConfigsI) > 0 {
+		sequence.PluginConfig.Filters = []LogFilter{}
+		for _, logFilterI := range logFilterConfigsI {
+			logFilterMap := logFilterI.(map[string]interface{})
+			configI := logFilterMap["config"].(map[string]interface{})
+			config := map[string]string{}
+			for k, v := range configI {
+				config[k] = v.(string)
+			}
+			filter := LogFilter{
+				Type:   logFilterMap["type"].(string),
+				Config: config,
+			}
+			sequence.PluginConfig.Filters = append(sequence.PluginConfig.Filters, filter)
+		}
+	}
 	job.CommandSequence = sequence
 
 	optionConfigsI := d.Get("option").([]interface{})
@@ -617,6 +645,7 @@ func jobFromResourceData(d *schema.ResourceData) (*JobDetail, error) {
 				ObscureInput:            optionMap["obscure_input"].(bool),
 				ValueIsExposedToScripts: optionMap["exposed_to_scripts"].(bool),
 				StoragePath:             optionMap["storage_path"].(string),
+				Hidden:                  optionMap["hidden"].(bool),
 			}
 			if option.StoragePath != "" && option.ObscureInput == false {
 				return nil, fmt.Errorf("Argument \"obscure_input\" must be set to `true` when \"storage_path\" is not empty.")
@@ -824,6 +853,7 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 				"obscure_input":             option.ObscureInput,
 				"exposed_to_scripts":        option.ValueIsExposedToScripts,
 				"storage_path":              option.StoragePath,
+				"hidden":                    option.Hidden,
 			}
 			optionConfigsI = append(optionConfigsI, optionConfigI)
 		}
@@ -831,6 +861,7 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 	d.Set("option", optionConfigsI)
 
 	commandConfigsI := []interface{}{}
+	LogFilterConfigsI := []interface{}{}
 	if job.CommandSequence != nil {
 		d.Set("command_ordering_strategy", job.CommandSequence.OrderingStrategy)
 		for _, command := range job.CommandSequence.Commands {
@@ -897,8 +928,21 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 
 			commandConfigsI = append(commandConfigsI, commandConfigI)
 		}
+		if job.CommandSequence.PluginConfig != nil {
+			for _, LogFilter := range job.CommandSequence.PluginConfig.Filters {
+				LogFilterConfigI := map[string]interface{}{}
+				LogFilterConfigI["LogFilter"] = []interface{}{
+					map[string]interface{}{
+						"type":   LogFilter.Type,
+						"config": map[string]string(LogFilter.Config),
+					},
+				}
+				LogFilterConfigsI = append(LogFilterConfigsI, LogFilterConfigI)
+			}
+		}
 	}
 	d.Set("command", commandConfigsI)
+	d.Set("LogFilter", LogFilterConfigsI)
 
 	if job.Schedule != nil {
 		schedule := []string{}
