@@ -261,6 +261,16 @@ func resourceRundeckJob() *schema.Resource {
 							Type:     schema.TypeBool,
 							Optional: true,
 						},
+
+						"storage_path": {
+							Type:     schema.TypeString,
+							Optional: true,
+						},
+
+						"hidden": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
 					},
 				},
 			},
@@ -326,19 +336,27 @@ func resourceRundeckJobCommand() *schema.Resource {
 				Optional: true,
 				Elem:     resourceRundeckJobPluginResource(),
 			},
+
 			"node_step_plugin": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     resourceRundeckJobPluginResource(),
 			},
+
 			"keep_going_on_success": {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+
 			"error_handler": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem:     resourceRundeckJobCommandErrorHandler(),
+			},
+
+			"file_extension": {
+				Type:     schema.TypeString,
+				Optional: true,
 			},
 		},
 	}
@@ -402,6 +420,11 @@ func resourceRundeckJobCommandErrorHandler() *schema.Resource {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+
+			"file_extension": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
 		},
 	}
 }
@@ -428,18 +451,27 @@ func resourceRundeckJobCommandJob() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
+
 			"group_name": {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
+
+			"project_name": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+
 			"run_for_each_node": {
 				Type:     schema.TypeBool,
 				Optional: true,
 			},
+
 			"args": {
 				Type:     schema.TypeString,
 				Optional: true,
 			},
+
 			"node_filters": {
 				Type:     schema.TypeList,
 				Optional: true,
@@ -460,6 +492,32 @@ func resourceRundeckJobCommandJob() *schema.Resource {
 					},
 				},
 			},
+
+			"max_thread_count": {
+				Type:     schema.TypeInt,
+				Optional: true,
+			},
+
+			"continue_next_node_on_error": {
+				Type:     schema.TypeBool,
+				Optional: true,
+			},
+
+			"rank_order": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+
+			"rank_attribute": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+
+			"node_intersect": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
 		},
 	}
 }
@@ -471,6 +529,7 @@ func resourceRundeckJobPluginResource() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
+
 			"config": {
 				Type:     schema.TypeMap,
 				Optional: true,
@@ -486,6 +545,7 @@ func resourceRundeckJobFilter() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 			},
+
 			"config": {
 				Type:     schema.TypeMap,
 				Optional: true,
@@ -661,6 +721,15 @@ func jobFromResourceData(d *schema.ResourceData) (*JobDetail, error) {
 				MultiValueDelimiter:     optionMap["multi_value_delimiter"].(string),
 				ObscureInput:            optionMap["obscure_input"].(bool),
 				ValueIsExposedToScripts: optionMap["exposed_to_scripts"].(bool),
+				StoragePath:             optionMap["storage_path"].(string),
+				Hidden:                  optionMap["hidden"].(bool),
+			}
+
+			if option.StoragePath != "" && option.ObscureInput == false {
+				return nil, fmt.Errorf("Argument \"obscure_input\" must be set to `true` when \"storage_path\" is not empty.")
+			}
+			if option.ValueIsExposedToScripts && option.ObscureInput == false {
+				return nil, fmt.Errorf("Argument \"obscure_input\" must be set to `true` when \"exposed_to_scripts\" is set to true.")
 			}
 
 			for _, iv := range optionMap["value_choices"].([]interface{}) {
@@ -828,6 +897,9 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 		if err := d.Set("rank_order", job.Dispatch.RankOrder); err != nil {
 			return err
 		}
+		if err := d.Set("success_on_empty_node_filter", job.Dispatch.SuccessOnEmptyNodeFilter); err != nil {
+			return err
+		}
 	} else {
 		if err := d.Set("max_thread_count", 1); err != nil {
 			return err
@@ -885,6 +957,8 @@ func jobToResourceData(job *JobDetail, d *schema.ResourceData) error {
 				"multi_value_delimiter":     option.MultiValueDelimiter,
 				"obscure_input":             option.ObscureInput,
 				"exposed_to_scripts":        option.ValueIsExposedToScripts,
+				"storage_path":              option.StoragePath,
+				"hidden":                    option.Hidden,
 			}
 			optionConfigsI = append(optionConfigsI, optionConfigI)
 		}
@@ -999,18 +1073,10 @@ func JobScheduleFromResourceData(d *schema.ResourceData, job *JobDetail) error {
 
 func scheduleToCronSpec(schedule *JobSchedule) (string, error) {
 	if schedule.Month.Day == "" {
-		if schedule.WeekDay.Day == "*" || schedule.WeekDay.Day == "" {
-			schedule.Month.Day = "*"
-		} else {
-			schedule.Month.Day = "?"
-		}
+		schedule.Month.Day = "?"
 	}
 	if schedule.WeekDay.Day == "" {
-		if schedule.Month.Day == "*" {
-			schedule.WeekDay.Day = "*"
-		} else {
-			schedule.WeekDay.Day = "?"
-		}
+		schedule.WeekDay.Day = "?"
 	}
 	cronSpec := make([]string, 0)
 	cronSpec = append(cronSpec, schedule.Time.Seconds)
@@ -1032,6 +1098,7 @@ func commandFromResourceData(commandI interface{}) (*JobCommand, error) {
 		ScriptFile:         commandMap["script_file"].(string),
 		ScriptFileArgs:     commandMap["script_file_args"].(string),
 		KeepGoingOnSuccess: commandMap["keep_going_on_success"].(bool),
+		FileExtension:      commandMap["file_extension"].(string),
 	}
 
 	// Because of the lack of schema recursion, the inner command has a separate schema without an error_handler
@@ -1089,8 +1156,16 @@ func jobCommandJobRefFromResourceData(key string, commandMap map[string]interfac
 	jobRef := &JobCommandJobRef{
 		Name:           jobRefMap["name"].(string),
 		GroupName:      jobRefMap["group_name"].(string),
+		ProjectName:    jobRefMap["project_name"].(string),
 		RunForEachNode: jobRefMap["run_for_each_node"].(bool),
 		Arguments:      JobCommandJobRefArguments(jobRefMap["args"].(string)),
+		Dispatch: &JobDispatch{
+			MaxThreadCount:          jobRefMap["max_thread_count"].(int),
+			ContinueNextNodeOnError: jobRefMap["continue_next_node_on_error"].(bool),
+			RankAttribute:           jobRefMap["rank_attribute"].(string),
+			RankOrder:               jobRefMap["rank_order"].(string),
+			NodeIntersect:           jobRefMap["node_intersect"].(bool),
+		},
 	}
 	nodeFiltersI := jobRefMap["node_filters"].([]interface{})
 	if len(nodeFiltersI) > 1 {
@@ -1136,6 +1211,7 @@ func commandToResourceData(command *JobCommand) (map[string]interface{}, error) 
 		"script_file":           command.ScriptFile,
 		"script_file_args":      command.ScriptFileArgs,
 		"keep_going_on_success": command.KeepGoingOnSuccess,
+		"file_extension":        command.FileExtension,
 	}
 
 	if command.ErrorHandler != nil {
@@ -1161,9 +1237,19 @@ func commandToResourceData(command *JobCommand) (map[string]interface{}, error) 
 		jobRefConfigI := map[string]interface{}{
 			"name":              command.Job.Name,
 			"group_name":        command.Job.GroupName,
+			"project_name":      command.Job.ProjectName,
 			"run_for_each_node": command.Job.RunForEachNode,
 			"args":              command.Job.Arguments,
 		}
+
+		if command.Job.Dispatch != nil {
+			jobRefConfigI["max_thread_count"] = command.Job.Dispatch.MaxThreadCount
+			jobRefConfigI["continue_next_node_on_error"] = command.Job.Dispatch.ContinueNextNodeOnError
+			jobRefConfigI["rank_attribute"] = command.Job.Dispatch.RankAttribute
+			jobRefConfigI["rank_order"] = command.Job.Dispatch.RankOrder
+			jobRefConfigI["node_intersect"] = command.Job.Dispatch.NodeIntersect
+		}
+
 		if command.Job.NodeFilter != nil {
 			nodeFilterConfigI := map[string]interface{}{
 				"exclude_precedence": command.Job.NodeFilter.ExcludePrecedence,

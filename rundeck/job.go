@@ -203,6 +203,9 @@ type JobOption struct {
 
 	// Description of the value to be shown in the Rundeck UI.
 	Description string `xml:"description,omitempty"`
+
+	// If set, Rundeck will hide this option.
+	Hidden bool `xml:"hidden,omitempty"`
 }
 
 // JobValueChoices is a specialization of []string representing a sequence of predefined values
@@ -286,6 +289,7 @@ type JobCommandJobRef struct {
 	XMLName        xml.Name                  `xml:"jobref"`
 	Name           string                    `xml:"name,attr"`
 	GroupName      string                    `xml:"group,attr"`
+	ProjectName    string                    `xml:"project,attr"`
 	RunForEachNode bool                      `xml:"nodeStep,attr"`
 	Dispatch       *JobDispatch              `xml:"dispatch,omitempty"`
 	NodeFilter     *JobNodeFilter            `xml:"nodefilters,omitempty"`
@@ -352,6 +356,7 @@ type JobDispatch struct {
 	RankAttribute            string `xml:"rankAttribute,omitempty"`
 	RankOrder                string `xml:"rankOrder,omitempty"`
 	SuccessOnEmptyNodeFilter bool   `xml:"successOnEmptyNodeFilter,omitempty"`
+	NodeIntersect            bool   `xml:"nodeIntersect,omitempty"`
 }
 
 // GetJobSummariesForProject returns summaries of the jobs belonging to the named project.
